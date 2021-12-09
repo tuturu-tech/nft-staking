@@ -116,7 +116,7 @@ describe("NFT Staking", function () {
     expect(balance).to.equal(ethers.utils.parseEther("100"));
   });
 
-  it("Should correctly calculate rewards and allow withdrawal with a single user", async function () {
+  it("Should correctly calculate rewards and allow withdrawal with a single user (Mappings)", async function () {
     let tx = await mockERC20.transfer(
       nftStake.address,
       ethers.utils.parseEther("100")
@@ -161,6 +161,63 @@ describe("NFT Staking", function () {
     expect(supply).to.equal(1);
 
     tx = await nftStake.withdraw(1);
+    tx.wait();
+
+    balance = await mockNFT.balanceOf(owner.address);
+    expect(balance.toNumber()).to.equal(2);
+
+    balance = await mockNFT.balanceOf(nftStake.address);
+    expect(balance.toNumber()).to.equal(0);
+
+    supply = await nftStake.totalSupply();
+    expect(supply).to.equal(0);
+  });
+
+  it("Should correctly calculate rewards and allow withdrawal with a single user (Struct)", async function () {
+    let tx = await mockERC20.transfer(
+      nftStake.address,
+      ethers.utils.parseEther("100")
+    );
+    tx.wait();
+
+    let oldBalance = await mockERC20.balanceOf(nftStake.address);
+    let oldUserBalance = await mockERC20.balanceOf(owner.address);
+
+    tx = await mockNFT.createCollectible();
+    tx.wait();
+
+    tx = await mockNFT.createCollectible();
+    tx.wait();
+
+    tx = await mockNFT.approve(nftStake.address, 1);
+    tx.wait();
+
+    tx = await nftStake.stake2(1);
+    tx.wait();
+    let timestamp = await getLatestBlockTimestamp();
+
+    jumpToTime(time.future1d);
+    let newTimestamp = await getLatestBlockTimestamp();
+    tx = nftStake.getReward();
+
+    const amount = BigNumber.from((newTimestamp - timestamp) * 100 + 100);
+
+    let expectedBalance = oldBalance.sub(amount);
+
+    balance = await mockERC20.balanceOf(nftStake.address);
+
+    expect(balance).to.equal(expectedBalance);
+
+    balance = await mockERC20.balanceOf(owner.address);
+
+    expectedBalance = oldUserBalance.add(amount);
+
+    expect(balance).to.equal(expectedBalance);
+
+    let supply = await nftStake.totalSupply();
+    expect(supply).to.equal(1);
+
+    tx = await nftStake.withdraw2(1);
     tx.wait();
 
     balance = await mockNFT.balanceOf(owner.address);

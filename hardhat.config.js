@@ -1,4 +1,5 @@
 require("@nomiclabs/hardhat-waffle");
+require("hardhat-gas-reporter");
 require("dotenv").config();
 
 // This is a sample Hardhat task. To learn how to create your own go to
@@ -53,5 +54,10 @@ module.exports = {
   },
   mocha: {
     timeout: 20000,
+  },
+  gasReporter: {
+    gasPriceApi:
+      "https://api.polygonscan.com/api?module=proxy&action=eth_gasPrice",
+    token: "BNB",
   },
 };

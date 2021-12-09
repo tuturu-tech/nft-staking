@@ -25,12 +25,12 @@ contract NFTStake is ERC721Holder, Ownable, Pausable {
     mapping(uint256 => address) private tokenStaker;
 
     // Might be cheaper to keep in a struct?
-    /*struct Staker {
+    struct Staker {
         uint256[] tokensStaked;
         mapping(uint256 => uint256) tokenIdToIndex;
     }
 
-    mapping(address => Staker) stakers;*/
+    mapping(address => Staker) stakers;
 
     // Is this more expensive than the struct?
     mapping(address => uint256[]) private addressToTokensStaked;
@@ -62,6 +62,25 @@ contract NFTStake is ERC721Holder, Ownable, Pausable {
         addressToTokensStaked[msg.sender].push(_tokenId);
         uint256 index = (addressToTokensStaked[msg.sender].length - 1);
         addressToTokenIndex[msg.sender][_tokenId] = index;
+
+        stakingToken.safeTransferFrom(msg.sender, address(this), _tokenId);
+        emit Staked(msg.sender, _tokenId);
+    }
+
+    function stake2(uint256 _tokenId)
+        external
+        updateReward(msg.sender)
+        notPaused
+    {
+        Staker storage staker = stakers[msg.sender];
+
+        _totalSupply += 1;
+        _balances[msg.sender] += 1;
+
+        tokenStaker[_tokenId] = msg.sender;
+        staker.tokensStaked.push(_tokenId);
+        uint256 index = (staker.tokensStaked.length - 1);
+        staker.tokenIdToIndex[_tokenId] = index;
 
         stakingToken.safeTransferFrom(msg.sender, address(this), _tokenId);
         emit Staked(msg.sender, _tokenId);
@@ -103,6 +122,35 @@ contract NFTStake is ERC721Holder, Ownable, Pausable {
         if (addressToTokensStaked[msg.sender].length > 0) {
             addressToTokensStaked[msg.sender].pop();
             delete addressToTokenIndex[msg.sender][_tokenId];
+        }
+
+        delete tokenStaker[_tokenId];
+
+        stakingToken.safeTransferFrom(address(this), msg.sender, _tokenId);
+
+        emit Withdrawn(msg.sender, _tokenId);
+    }
+
+    function withdraw2(uint256 _tokenId) external updateReward(msg.sender) {
+        require(
+            tokenStaker[_tokenId] == msg.sender,
+            "Someone else has staked this token "
+        );
+        Staker storage staker = stakers[msg.sender];
+
+        _totalSupply -= 1;
+        _balances[msg.sender] -= 1;
+
+        uint256 lastIndex = (staker.tokensStaked.length - 1);
+        uint256 lastIndexKey = staker.tokensStaked[lastIndex];
+        uint256 tokenIdIndex = staker.tokenIdToIndex[_tokenId];
+
+        staker.tokensStaked[tokenIdIndex] = lastIndexKey;
+        staker.tokenIdToIndex[lastIndexKey] = tokenIdIndex;
+
+        if (staker.tokensStaked.length > 0) {
+            staker.tokensStaked.pop();
+            delete staker.tokenIdToIndex[_tokenId];
         }
 
         delete tokenStaker[_tokenId];
