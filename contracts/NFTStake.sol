@@ -7,6 +7,8 @@ import "@openzeppelin/contracts/interfaces/IERC721.sol";
 import "@openzeppelin/contracts/token/ERC721/utils/ERC721Holder.sol";
 import "./Pausable.sol";
 
+import "hardhat/console.sol";
+
 contract NFTStake is ERC721Holder, Ownable, Pausable {
     using SafeERC20 for IERC20;
 
@@ -32,10 +34,6 @@ contract NFTStake is ERC721Holder, Ownable, Pausable {
 
     mapping(address => Staker) stakers;
 
-    // Is this more expensive than the struct?
-    mapping(address => uint256[]) private addressToTokensStaked;
-    mapping(address => mapping(uint256 => uint256)) private addressToTokenIndex;
-
     constructor(address _stakingToken, address _rewardsToken) Ownable() {
         stakingToken = IERC721(_stakingToken);
         rewardsToken = IERC20(_rewardsToken);
@@ -51,23 +49,6 @@ contract NFTStake is ERC721Holder, Ownable, Pausable {
     }
 
     function stake(uint256 _tokenId)
-        external
-        updateReward(msg.sender)
-        notPaused
-    {
-        _totalSupply += 1;
-        _balances[msg.sender] += 1;
-
-        tokenStaker[_tokenId] = msg.sender;
-        addressToTokensStaked[msg.sender].push(_tokenId);
-        uint256 index = (addressToTokensStaked[msg.sender].length - 1);
-        addressToTokenIndex[msg.sender][_tokenId] = index;
-
-        stakingToken.safeTransferFrom(msg.sender, address(this), _tokenId);
-        emit Staked(msg.sender, _tokenId);
-    }
-
-    function stake2(uint256 _tokenId)
         external
         updateReward(msg.sender)
         notPaused
@@ -104,34 +85,8 @@ contract NFTStake is ERC721Holder, Ownable, Pausable {
         }
     }
 */
+
     function withdraw(uint256 _tokenId) external updateReward(msg.sender) {
-        require(
-            tokenStaker[_tokenId] == msg.sender,
-            "Someone else has staked this token "
-        );
-        _totalSupply -= 1;
-        _balances[msg.sender] -= 1;
-
-        uint256 lastIndex = (addressToTokensStaked[msg.sender].length - 1);
-        uint256 lastIndexKey = addressToTokensStaked[msg.sender][lastIndex];
-        uint256 tokenIdIndex = addressToTokenIndex[msg.sender][_tokenId];
-
-        addressToTokensStaked[msg.sender][tokenIdIndex] = lastIndexKey;
-        addressToTokenIndex[msg.sender][lastIndexKey] = tokenIdIndex;
-
-        if (addressToTokensStaked[msg.sender].length > 0) {
-            addressToTokensStaked[msg.sender].pop();
-            delete addressToTokenIndex[msg.sender][_tokenId];
-        }
-
-        delete tokenStaker[_tokenId];
-
-        stakingToken.safeTransferFrom(address(this), msg.sender, _tokenId);
-
-        emit Withdrawn(msg.sender, _tokenId);
-    }
-
-    function withdraw2(uint256 _tokenId) external updateReward(msg.sender) {
         require(
             tokenStaker[_tokenId] == msg.sender,
             "Someone else has staked this token "
@@ -214,10 +169,6 @@ contract NFTStake is ERC721Holder, Ownable, Pausable {
         external
         onlyOwner
     {
-        require(
-            tokenAddress != address(stakingToken),
-            "Cannot withdraw the staking token"
-        );
         IERC20(tokenAddress).safeTransfer(owner(), tokenAmount);
         emit Recovered(tokenAddress, tokenAmount);
     }
