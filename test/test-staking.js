@@ -25,23 +25,48 @@ const getLatestBlockTimestamp = async () => {
 describe("NFT Staking", function () {
   let mockNFT, mockERC20, nftStake, owner, addr1, addr2;
 
-  beforeEach(async function () {
-    [owner, addr1, addr2] = await ethers.getSigners();
-    const MockNFT = await hre.ethers.getContractFactory("MockERC721");
-    mockNFT = await MockNFT.deploy("https://test.com/");
+  if (network.name == "hardhat") {
+    console.log("Hardhat");
+    beforeEach(async function () {
+      [owner, addr1, addr2] = await ethers.getSigners();
+      const MockNFT = await hre.ethers.getContractFactory("MockERC721");
+      mockNFT = await MockNFT.deploy("https://test.com/");
 
-    await mockNFT.deployed();
+      await mockNFT.deployed();
 
-    const MockERC20 = await hre.ethers.getContractFactory("MockERC20");
-    mockERC20 = await MockERC20.deploy();
+      const MockERC20 = await hre.ethers.getContractFactory("MockERC20");
+      mockERC20 = await MockERC20.deploy();
 
-    await mockERC20.deployed();
+      await mockERC20.deployed();
 
-    const NFTStake = await hre.ethers.getContractFactory("NFTStake");
-    nftStake = await NFTStake.deploy(mockNFT.address, mockERC20.address);
+      const NFTStake = await hre.ethers.getContractFactory("NFTStake");
+      nftStake = await NFTStake.deploy(mockNFT.address, mockERC20.address);
 
-    await nftStake.deployed();
-  });
+      await nftStake.deployed();
+    });
+  } else {
+    it("Deploys correctly", async function () {
+      console.log("Testnet");
+      [owner, addr1, ...signers] = await ethers.getSigners();
+      const MockNFT = await hre.ethers.getContractFactory("MockERC721");
+      mockNFT = await MockNFT.deploy("https://test.com/");
+
+      await mockNFT.deployed();
+      console.log("mockNFT deployed to:", mockNFT.address);
+
+      const MockERC20 = await hre.ethers.getContractFactory("MockERC20");
+      mockERC20 = await MockERC20.deploy();
+
+      await mockERC20.deployed();
+      console.log("mockERC20 deployed to:", mockERC20.address);
+
+      const NFTStake = await hre.ethers.getContractFactory("NFTStake");
+      nftStake = await NFTStake.deploy(mockNFT.address, mockERC20.address);
+
+      await nftStake.deployed();
+      console.log("nftStake deployed to:", nftStake.address);
+    });
+  }
 
   it("Should correctly initialize NFT Staking contract", async function () {
     const rewardsToken = await nftStake.rewardsToken();

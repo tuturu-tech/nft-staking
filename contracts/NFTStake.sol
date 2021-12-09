@@ -26,7 +26,6 @@ contract NFTStake is ERC721Holder, Ownable, Pausable {
     mapping(address => uint256) private _balances;
     mapping(uint256 => address) private tokenStaker;
 
-    // Might be cheaper to keep in a struct?
     struct Staker {
         uint256[] tokensStaked;
         mapping(uint256 => uint256) tokenIdToIndex;
