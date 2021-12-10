@@ -22,7 +22,7 @@ const getLatestBlockTimestamp = async () => {
   return BN(block.timestamp).toString();
 };
 
-describe("NFT Staking local", function () {
+describe.only("NFT Staking local", function () {
   let mockNFT, mockERC20, nftStake, owner, addr1, addr2;
 
   beforeEach(async function () {

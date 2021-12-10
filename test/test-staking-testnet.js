@@ -22,7 +22,7 @@ const getLatestBlockTimestamp = async () => {
   return BN(block.timestamp).toString();
 };
 
-describe.only("NFT Staking Testnet", function () {
+describe("NFT Staking Testnet", function () {
   const mockNFTAddress = "0xC2BabF1df2018259e34DF73364B7dDd92bA3B4Ef";
   const mockERC20Address = "0x70DA128Ab89feB285a251A201d574490e35a9A25";
   const nftStakeAddress = "0xFEf55596328e80E46c0F9c423Df2b62A436da487";

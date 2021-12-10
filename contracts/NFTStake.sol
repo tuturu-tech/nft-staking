@@ -5,12 +5,14 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/interfaces/IERC721.sol";
 import "@openzeppelin/contracts/token/ERC721/utils/ERC721Holder.sol";
+import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "./Pausable.sol";
 
 import "hardhat/console.sol";
 
 contract NFTStake is ERC721Holder, Ownable, Pausable {
     using SafeERC20 for IERC20;
+    using SafeMath for uint256;
 
     IERC20 public rewardsToken;
     IERC721 public stakingToken;
@@ -41,9 +43,10 @@ contract NFTStake is ERC721Holder, Ownable, Pausable {
     modifier updateReward(address account) {
         rewardPerTokenStored = rewardPerToken();
         lastUpdateTime = block.timestamp;
-
-        rewards[account] = earned(account);
-        userRewardPerTokenPaid[account] = rewardPerTokenStored;
+        if (account != address(0)) {
+            rewards[account] = earned(account);
+            userRewardPerTokenPaid[account] = rewardPerTokenStored;
+        }
         _;
     }
 
@@ -54,12 +57,12 @@ contract NFTStake is ERC721Holder, Ownable, Pausable {
     {
         Staker storage staker = stakers[msg.sender];
 
-        _totalSupply += 1;
-        _balances[msg.sender] += 1;
+        _totalSupply = _totalSupply.add(1);
+        _balances[msg.sender] = _balances[msg.sender].add(1);
 
         tokenStaker[_tokenId] = msg.sender;
         staker.tokensStaked.push(_tokenId);
-        uint256 index = (staker.tokensStaked.length - 1);
+        uint256 index = (staker.tokensStaked.length.sub(1));
         staker.tokenIdToIndex[_tokenId] = index;
 
         stakingToken.safeTransferFrom(msg.sender, address(this), _tokenId);
@@ -92,10 +95,10 @@ contract NFTStake is ERC721Holder, Ownable, Pausable {
         );
         Staker storage staker = stakers[msg.sender];
 
-        _totalSupply -= 1;
-        _balances[msg.sender] -= 1;
+        _totalSupply = _totalSupply.sub(1);
+        _balances[msg.sender] = _balances[msg.sender].sub(1);
 
-        uint256 lastIndex = (staker.tokensStaked.length - 1);
+        uint256 lastIndex = (staker.tokensStaked.length.sub(1));
         uint256 lastIndexKey = staker.tokensStaked[lastIndex];
         uint256 tokenIdIndex = staker.tokenIdToIndex[_tokenId];
 
@@ -147,19 +150,25 @@ contract NFTStake is ERC721Holder, Ownable, Pausable {
 
     function rewardPerToken() public view returns (uint256) {
         if (_totalSupply == 0) {
-            return 0;
+            return rewardPerTokenStored;
         }
         return
-            rewardPerTokenStored +
-            (((block.timestamp - lastUpdateTime) * rewardRate * 1e18) /
-                _totalSupply);
+            rewardPerTokenStored.add(
+                block
+                    .timestamp
+                    .sub(lastUpdateTime)
+                    .mul(rewardRate)
+                    .mul(1e18)
+                    .div(_totalSupply)
+            );
     }
 
     function earned(address account) public view returns (uint256) {
         return
-            ((_balances[account] *
-                (rewardPerToken() - userRewardPerTokenPaid[account])) / 1e18) +
-            rewards[account];
+            _balances[account]
+                .mul(rewardPerToken().sub(userRewardPerTokenPaid[account]))
+                .div(1e18)
+                .add(rewards[account]);
     }
 
     /* ========== RESTRICTED ========== */
