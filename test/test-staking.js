@@ -274,14 +274,14 @@ describe.only("NFT Staking local", function () {
 
     tx = await nftStake.getReward();
     let receipt = await tx.wait();
-    let result = receipt.events?.filter((x) => {
+    let result = receipt.events.filter((x) => {
       return x.event == "RewardPaid";
     });
     const amount = result[0].args.reward;
 
     tx = await nftStake.connect(addr1).getReward();
     receipt = await tx.wait();
-    result = receipt.events?.filter((x) => {
+    result = receipt.events.filter((x) => {
       return x.event == "RewardPaid";
     });
     const amount2 = result[0].args.reward;

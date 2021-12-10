@@ -32,12 +32,6 @@ module.exports = {
       gasPrice: 20000000000,
       accounts: [process.env.PRIVATE_KEY, process.env.PRIVATE_KEY2],
     },
-    mainnet: {
-      url: "https://bsc-dataseed.binance.org/",
-      chainId: 56,
-      gasPrice: 20000000000,
-      accounts: [process.env.PRIVATE_KEY],
-    },
   },
   solidity: {
     version: "0.8.4",
