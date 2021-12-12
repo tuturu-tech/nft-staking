@@ -6,11 +6,12 @@ import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/interfaces/IERC721.sol";
 import "@openzeppelin/contracts/token/ERC721/utils/ERC721Holder.sol";
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
+import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "./Pausable.sol";
 
 import "hardhat/console.sol";
 
-contract NFTStake is ERC721Holder, Ownable, Pausable {
+contract NFTStake is ERC721Holder, ReentrancyGuard, Ownable, Pausable {
     using SafeERC20 for IERC20;
     using SafeMath for uint256;
 
@@ -52,8 +53,9 @@ contract NFTStake is ERC721Holder, Ownable, Pausable {
 
     function stake(uint256 _tokenId)
         external
-        updateReward(msg.sender)
         notPaused
+        nonReentrant
+        updateReward(msg.sender)
     {
         Staker storage staker = stakers[msg.sender];
 
@@ -88,7 +90,7 @@ contract NFTStake is ERC721Holder, Ownable, Pausable {
     }
 */
 
-    function withdraw(uint256 _tokenId) external updateReward(msg.sender) {
+    function withdraw(uint256 _tokenId) external nonReentrant updateReward(msg.sender) {
         require(
             tokenStaker[_tokenId] == msg.sender,
             "Someone else has staked this token "
@@ -134,10 +136,10 @@ contract NFTStake is ERC721Holder, Ownable, Pausable {
         }
     }
 */
-    function getReward() external updateReward(msg.sender) {
+    function getReward() external nonReentrant updateReward(msg.sender) {
         uint256 reward = rewards[msg.sender];
         rewards[msg.sender] = 0;
-        rewardsToken.transfer(msg.sender, reward);
+        require(rewardsToken.transfer(msg.sender, reward));
 
         emit RewardPaid(msg.sender, reward);
     }
@@ -171,6 +173,10 @@ contract NFTStake is ERC721Holder, Ownable, Pausable {
                 .add(rewards[account]);
     }
 
+    function checkRewardTokenBalance() public view returns (uint256) {
+        return rewardsToken.balanceOf(address(this));
+    }
+
     /* ========== RESTRICTED ========== */
 
     function recoverERC20(address tokenAddress, uint256 tokenAmount)
@@ -179,6 +185,14 @@ contract NFTStake is ERC721Holder, Ownable, Pausable {
     {
         IERC20(tokenAddress).safeTransfer(owner(), tokenAmount);
         emit Recovered(tokenAddress, tokenAmount);
+    }
+
+    function updateRewardRate(uint256 _rewardRate) public onlyOwner {
+        rewardRate = _rewardRate;
+    }
+
+    function withdrawRewardToken(uint256 tokenAmount) public onlyOwner {
+        rewardsToken.safeTransfer(owner(), tokenAmount);
     }
 
     /* ========== EVENTS ========== */
