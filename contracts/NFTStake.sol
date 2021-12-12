@@ -65,7 +65,7 @@ contract NFTStake is ERC721Holder, Ownable, Pausable {
         uint256 index = (staker.tokensStaked.length.sub(1));
         staker.tokenIdToIndex[_tokenId] = index;
 
-        stakingToken.safeTransferFrom(msg.sender, address(this), _tokenId);
+        stakingToken.safeTransferFrom(msg.sender, address(this), _tokenId); //Maybe require the return
         emit Staked(msg.sender, _tokenId);
     }
 
@@ -105,7 +105,7 @@ contract NFTStake is ERC721Holder, Ownable, Pausable {
         staker.tokensStaked[tokenIdIndex] = lastIndexKey;
         staker.tokenIdToIndex[lastIndexKey] = tokenIdIndex;
 
-        if (staker.tokensStaked.length > 0) {
+        if (staker.tokensStaked.length > 0) { //Unnecessary?
             staker.tokensStaked.pop();
             delete staker.tokenIdToIndex[_tokenId];
         }
