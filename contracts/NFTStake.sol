@@ -5,15 +5,13 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/interfaces/IERC721.sol";
 import "@openzeppelin/contracts/token/ERC721/utils/ERC721Holder.sol";
-import "@openzeppelin/contracts/utils/math/SafeMath.sol";
-import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
-import "./Pausable.sol";
+// import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/security/Pausable.sol";
 
 import "hardhat/console.sol";
 
-contract NFTStake is ERC721Holder, ReentrancyGuard, Ownable, Pausable {
+contract NFTStake is ERC721Holder, Ownable, Pausable {
     using SafeERC20 for IERC20;
-    using SafeMath for uint256;
 
     IERC20 public rewardsToken;
     IERC721 public stakingToken;
@@ -25,18 +23,13 @@ contract NFTStake is ERC721Holder, ReentrancyGuard, Ownable, Pausable {
     mapping(address => uint256) public userRewardPerTokenPaid;
     mapping(address => uint256) public rewards;
 
-    uint256 private _totalSupply;
-    mapping(address => uint256) private _balances;
-    mapping(uint256 => address) private tokenStaker;
+    uint256 public totalSupply;
+    mapping(address => uint256) public balances;
+    mapping(uint256 => address) private _tokenIdToStaker;
+    mapping(uint256 => uint256) private _tokenIdToIndex;
+    mapping(address => uint256[]) private _stakedTokens;
 
-    struct Staker {
-        uint256[] tokensStaked;
-        mapping(uint256 => uint256) tokenIdToIndex;
-    }
-
-    mapping(address => Staker) stakers;
-
-    constructor(address _stakingToken, address _rewardsToken) Ownable() {
+    constructor(address _stakingToken, address _rewardsToken) {
         stakingToken = IERC721(_stakingToken);
         rewardsToken = IERC20(_rewardsToken);
     }
@@ -53,60 +46,56 @@ contract NFTStake is ERC721Holder, ReentrancyGuard, Ownable, Pausable {
 
     function stake(uint256 _tokenId)
         external
-        notPaused
-        nonReentrant
+        whenNotPaused
         updateReward(msg.sender)
     {
-        Staker storage staker = stakers[msg.sender];
+        uint256[] storage senderTokenIds = _stakedTokens[msg.sender];
 
-        _totalSupply = _totalSupply.add(1);
-        _balances[msg.sender] = _balances[msg.sender].add(1);
+        _tokenIdToIndex[_tokenId] = senderTokenIds.length;
+        _tokenIdToStaker[_tokenId] = msg.sender;
 
-        tokenStaker[_tokenId] = msg.sender;
-        staker.tokensStaked.push(_tokenId);
-        uint256 index = (staker.tokensStaked.length.sub(1));
-        staker.tokenIdToIndex[_tokenId] = index;
+        senderTokenIds.push(_tokenId);
 
-        stakingToken.safeTransferFrom(msg.sender, address(this), _tokenId); //Maybe require the return
+        balances[msg.sender]++;
+        totalSupply++;
+
+        stakingToken.transferFrom(msg.sender, address(this), _tokenId);
+
         emit Staked(msg.sender, _tokenId);
     }
 
-    function withdraw(uint256 _tokenId)
-        external
-        nonReentrant
-        updateReward(msg.sender)
-    {
-        require(
-            tokenStaker[_tokenId] == msg.sender,
-            "Someone else has staked this token "
-        );
-        Staker storage staker = stakers[msg.sender];
+    function withdraw(uint256 _tokenId) external updateReward(msg.sender) {
+        require(_tokenIdToStaker[_tokenId] == msg.sender, "NOT_CALLERS_TOKEN");
 
-        _totalSupply = _totalSupply.sub(1);
-        _balances[msg.sender] = _balances[msg.sender].sub(1);
+        uint256[] storage senderTokenIds = _stakedTokens[msg.sender];
 
-        uint256 lastIndex = (staker.tokensStaked.length.sub(1));
-        uint256 lastIndexKey = staker.tokensStaked[lastIndex];
-        uint256 tokenIdIndex = staker.tokenIdToIndex[_tokenId];
+        // get index of token id to be removed
+        uint256 removeTokenIndex = _tokenIdToIndex[_tokenId];
+        // get id of last token in senderTokenIds array that will replace removed token
+        uint256 lastTokenId = senderTokenIds[senderTokenIds.length - 1];
 
-        staker.tokensStaked[tokenIdIndex] = lastIndexKey;
-        staker.tokenIdToIndex[lastIndexKey] = tokenIdIndex;
+        // replace token to be removed with last token
+        senderTokenIds[removeTokenIndex] = lastTokenId;
+        // update pointer in _tokenIdToIndex to index of token to be removed
+        _tokenIdToIndex[lastTokenId] = removeTokenIndex;
 
-        if (staker.tokensStaked.length > 0) {
-            staker.tokensStaked.pop();
-            delete staker.tokenIdToIndex[_tokenId];
-        }
+        // remove (now duplicate) last token id
+        senderTokenIds.pop();
+        delete _tokenIdToIndex[_tokenId];
+        delete _tokenIdToStaker[_tokenId];
 
-        delete tokenStaker[_tokenId];
+        totalSupply--;
+        balances[msg.sender]--;
 
-        stakingToken.safeTransferFrom(address(this), msg.sender, _tokenId);
+        stakingToken.transferFrom(address(this), msg.sender, _tokenId);
 
         emit Withdrawn(msg.sender, _tokenId);
     }
 
-    function getReward() external nonReentrant updateReward(msg.sender) {
+    function claimRewards() external updateReward(msg.sender) {
         uint256 reward = rewards[msg.sender];
         rewards[msg.sender] = 0;
+
         require(rewardsToken.transfer(msg.sender, reward));
 
         emit RewardPaid(msg.sender, reward);
@@ -114,31 +103,28 @@ contract NFTStake is ERC721Holder, ReentrancyGuard, Ownable, Pausable {
 
     /* ========== VIEW ========== */
 
-    function totalSupply() external view returns (uint256) {
-        return _totalSupply;
+    function getStakedTokens(address user)
+        external
+        view
+        returns (uint256[] memory)
+    {
+        return _stakedTokens[user];
     }
 
     function rewardPerToken() public view returns (uint256) {
-        if (_totalSupply == 0) {
-            return rewardPerTokenStored;
-        }
+        if (totalSupply == 0) return rewardPerTokenStored;
         return
-            rewardPerTokenStored.add(
-                block
-                    .timestamp
-                    .sub(lastUpdateTime)
-                    .mul(rewardRate)
-                    .mul(1e18)
-                    .div(_totalSupply)
-            );
+            rewardPerTokenStored +
+            ((block.timestamp - lastUpdateTime) * rewardRate * 1e18) /
+            totalSupply;
     }
 
     function earned(address account) public view returns (uint256) {
         return
-            _balances[account]
-                .mul(rewardPerToken().sub(userRewardPerTokenPaid[account]))
-                .div(1e18)
-                .add(rewards[account]);
+            rewards[account] +
+            (balances[account] *
+                (rewardPerToken() - userRewardPerTokenPaid[account])) /
+            1e18;
     }
 
     function checkRewardTokenBalance() public view returns (uint256) {
@@ -147,12 +133,8 @@ contract NFTStake is ERC721Holder, ReentrancyGuard, Ownable, Pausable {
 
     /* ========== RESTRICTED ========== */
 
-    function recoverERC20(address tokenAddress, uint256 tokenAmount)
-        external
-        onlyOwner
-    {
-        IERC20(tokenAddress).safeTransfer(owner(), tokenAmount);
-        emit Recovered(tokenAddress, tokenAmount);
+    function recoverERC20(IERC20 token) external onlyOwner {
+        token.safeTransfer(owner(), token.balanceOf(address(this)));
     }
 
     function updateRewardRate(uint256 _rewardRate) external onlyOwner {
@@ -163,8 +145,13 @@ contract NFTStake is ERC721Holder, ReentrancyGuard, Ownable, Pausable {
         rewardsToken.safeTransfer(owner(), tokenAmount);
     }
 
-    function setRewardToken(address _rewardsToken) external onlyOwner {
-        rewardsToken = IERC20(_rewardsToken);
+    function setRewardToken(IERC20 _rewardsToken) external onlyOwner {
+        rewardsToken = _rewardsToken;
+    }
+
+    function setPaused(bool _paused) external onlyOwner {
+        if (_paused) _pause();
+        else _unpause();
     }
 
     /* ========== EVENTS ========== */
@@ -172,5 +159,4 @@ contract NFTStake is ERC721Holder, ReentrancyGuard, Ownable, Pausable {
     event Staked(address indexed user, uint256 _tokenId);
     event Withdrawn(address indexed user, uint256 _tokenId);
     event RewardPaid(address indexed user, uint256 reward);
-    event Recovered(address token, uint256 amount);
 }

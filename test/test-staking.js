@@ -1,49 +1,53 @@
-const { expect } = require("chai");
-const { ethers, network } = require("hardhat");
-const { BigNumber, utils } = require("ethers");
+const { expect } = require('chai');
+const { ethers, network } = require('hardhat');
+const { BigNumber, utils } = require('ethers');
 
-const { centerTime } = require("../scripts/time.js");
+const { centerTime } = require('../scripts/time.js');
 
 const BN = BigNumber.from;
 
 var time = centerTime();
 
 const jumpToTime = async (t) => {
-  await network.provider.send("evm_mine", [t.toNumber()]);
+  await network.provider.send('evm_mine', [t.toNumber()]);
   time = centerTime(t);
 };
 
 const getLatestBlockTimestamp = async () => {
-  let blocknum = await network.provider.request({ method: "eth_blockNumber" });
+  let blocknum = await network.provider.request({ method: 'eth_blockNumber' });
   let block = await network.provider.request({
-    method: "eth_getBlockByNumber",
+    method: 'eth_getBlockByNumber',
     params: [blocknum, true],
   });
   return BN(block.timestamp).toString();
 };
 
-describe.only("NFT Staking local", function () {
+describe.only('NFT Staking local', function () {
   let mockNFT, mockERC20, nftStake, owner, addr1, addr2;
 
   beforeEach(async function () {
     [owner, addr1, addr2] = await ethers.getSigners();
-    const MockNFT = await hre.ethers.getContractFactory("MockERC721");
-    mockNFT = await MockNFT.deploy("https://test.com/");
+    const MockNFT = await hre.ethers.getContractFactory('MockERC721');
+    mockNFT = await MockNFT.deploy();
 
     await mockNFT.deployed();
 
-    const MockERC20 = await hre.ethers.getContractFactory("MockERC20");
+    const MockERC20 = await hre.ethers.getContractFactory('MockERC20');
     mockERC20 = await MockERC20.deploy();
 
     await mockERC20.deployed();
 
-    const NFTStake = await hre.ethers.getContractFactory("NFTStake");
+    const NFTStake = await hre.ethers.getContractFactory('NFTStake');
     nftStake = await NFTStake.deploy(mockNFT.address, mockERC20.address);
 
     await nftStake.deployed();
+
+    await mockNFT.setApprovalForAll(nftStake.address, true);
+    await mockNFT.connect(addr1).setApprovalForAll(nftStake.address, true);
+    await mockNFT.connect(addr2).setApprovalForAll(nftStake.address, true);
   });
 
-  it("Should correctly initialize NFT Staking contract", async function () {
+  it('Should correctly initialize NFT Staking contract', async function () {
     const rewardsToken = await nftStake.rewardsToken();
     const stakingToken = await nftStake.stakingToken();
 
@@ -55,41 +59,41 @@ describe.only("NFT Staking local", function () {
     expect(contractOwner).to.not.equal(addr1.address);
   });
 
-  it("Should correctly create NFTs", async function () {
-    let tx = await mockNFT.createCollectible();
-    tx.wait();
+  it('Should not allow withdrawing non-owner nfts', async function () {
+    await mockNFT.mint();
+    await nftStake.stake(0);
 
-    let balance = await mockNFT.balanceOf(owner.address);
-    expect(balance.toNumber()).to.equal(1);
-
-    tx = await mockNFT.createCollectible();
-    tx.wait();
-
-    balance = await mockNFT.balanceOf(owner.address);
-
-    expect(balance.toNumber()).to.equal(2);
+    await expect(nftStake.connect(addr1).withdraw(0)).to.be.revertedWith('NOT_CALLERS_TOKEN');
   });
 
-  it("Should correctly stake NFTs", async function () {
-    let tx = await mockNFT.createCollectible();
-    tx.wait();
+  it('Should not allow withdrawing token twice', async function () {
+    await mockNFT.mintBatch(5);
+    await mockNFT.connect(addr1).mintBatch(3);
 
-    tx = await mockNFT.createCollectible();
-    tx.wait();
+    await nftStake.stake(0);
+    await nftStake.stake(1);
+    await nftStake.stake(2);
 
-    let balance = await mockNFT.balanceOf(owner.address);
+    await nftStake.connect(addr1).stake(5);
+    await nftStake.connect(addr1).stake(6);
 
-    expect(balance.toNumber()).to.equal(2);
+    // console.log(await nftStake.getStakedTokens(owner.address));
+    // console.log(await nftStake.getStakedTokens(addr1.address));
 
-    tx = await mockNFT.approve(nftStake.address, 1);
-    tx.wait();
+    await nftStake.withdraw(0);
+    await nftStake.connect(addr1).withdraw(6);
 
-    const isApproved = await mockNFT.getApproved(1);
+    // console.log(await nftStake.getStakedTokens(owner.address));
+    // console.log(await nftStake.getStakedTokens(addr1.address));
 
-    expect(isApproved).to.equal(nftStake.address);
+    await expect(nftStake.connect(addr1).withdraw(6)).to.be.revertedWith('NOT_CALLERS_TOKEN');
+  });
 
-    tx = await nftStake.stake(1);
-    tx.wait();
+  it('Should correctly stake NFTs', async function () {
+    await mockNFT.mint();
+    await mockNFT.mint();
+
+    await nftStake.stake(1);
 
     balance = await mockNFT.balanceOf(owner.address);
     expect(balance.toNumber()).to.equal(1);
@@ -98,50 +102,21 @@ describe.only("NFT Staking local", function () {
     expect(balance.toNumber()).to.equal(1);
   });
 
-  it("Should correctly fund NFT Staking contract", async function () {
-    balance = await mockERC20.balanceOf(owner.address);
-
-    expect(balance).to.equal(ethers.utils.parseEther("1000"));
-
-    let tx = await mockERC20.transfer(
-      nftStake.address,
-      ethers.utils.parseEther("100")
-    );
-    tx.wait();
-
-    balance = await mockERC20.balanceOf(owner.address);
-    expect(balance).to.equal(ethers.utils.parseEther("900"));
-
-    balance = await mockERC20.balanceOf(nftStake.address);
-    expect(balance).to.equal(ethers.utils.parseEther("100"));
-  });
-
-  it("Should correctly calculate rewards and allow withdrawal with a single user", async function () {
-    let tx = await mockERC20.transfer(
-      nftStake.address,
-      ethers.utils.parseEther("100")
-    );
-    tx.wait();
+  it('Should correctly calculate rewards and allow withdrawal with a single user', async function () {
+    await mockERC20.transfer(nftStake.address, ethers.utils.parseEther('100'));
 
     let oldBalance = await mockERC20.balanceOf(nftStake.address);
     let oldUserBalance = await mockERC20.balanceOf(owner.address);
 
-    tx = await mockNFT.createCollectible();
-    tx.wait();
+    await mockNFT.mint();
+    await mockNFT.mint();
 
-    tx = await mockNFT.createCollectible();
-    tx.wait();
-
-    tx = await mockNFT.approve(nftStake.address, 1);
-    tx.wait();
-
-    tx = await nftStake.stake(1);
-    tx.wait();
+    await nftStake.stake(1);
     let timestamp = await getLatestBlockTimestamp();
 
-    jumpToTime(time.future1d);
+    await jumpToTime(time.future1d);
     let newTimestamp = await getLatestBlockTimestamp();
-    tx = nftStake.getReward();
+    await nftStake.claimRewards();
 
     const amount = BigNumber.from((newTimestamp - timestamp) * 100 + 100);
 
@@ -160,8 +135,7 @@ describe.only("NFT Staking local", function () {
     let supply = await nftStake.totalSupply();
     expect(supply).to.equal(1);
 
-    tx = await nftStake.withdraw(1);
-    tx.wait();
+    await nftStake.withdraw(1);
 
     balance = await mockNFT.balanceOf(owner.address);
     expect(balance.toNumber()).to.equal(2);
@@ -173,42 +147,27 @@ describe.only("NFT Staking local", function () {
     expect(supply).to.equal(0);
   });
 
-  it("Should not allow staking when the contract is paused", async function () {
-    let tx = await mockERC20.transfer(
-      nftStake.address,
-      ethers.utils.parseEther("100")
-    );
-    tx.wait();
+  it('Should not allow staking when the contract is paused', async function () {
+    await mockERC20.transfer(nftStake.address, ethers.utils.parseEther('100'));
 
     let oldBalance = await mockERC20.balanceOf(nftStake.address);
     let oldUserBalance = await mockERC20.balanceOf(owner.address);
 
-    tx = await mockNFT.createCollectible();
-    tx.wait();
+    await mockNFT.mint();
+    await mockNFT.mint();
 
-    tx = await mockNFT.createCollectible();
-    tx.wait();
+    await nftStake.setPaused(true);
 
-    tx = await mockNFT.approve(nftStake.address, 1);
-    tx.wait();
+    await expect(nftStake.stake(1)).to.be.revertedWith('Pausable: paused');
 
-    tx = await nftStake.setPaused(true);
-    tx.wait();
+    await nftStake.setPaused(false);
 
-    await expect(nftStake.stake(1)).to.be.revertedWith(
-      "This action cannot be performed while the contract is paused"
-    );
-
-    tx = await nftStake.setPaused(false);
-    tx.wait();
-
-    tx = await nftStake.stake(1);
-    tx.wait();
+    await nftStake.stake(1);
     let timestamp = await getLatestBlockTimestamp();
 
-    jumpToTime(time.future1d);
+    await jumpToTime(time.future1d);
     let newTimestamp = await getLatestBlockTimestamp();
-    tx = nftStake.getReward();
+    await nftStake.claimRewards();
 
     const amount = BigNumber.from((newTimestamp - timestamp) * 100 + 100);
 
@@ -227,8 +186,7 @@ describe.only("NFT Staking local", function () {
     let supply = await nftStake.totalSupply();
     expect(supply).to.equal(1);
 
-    tx = await nftStake.withdraw(1);
-    tx.wait();
+    await nftStake.withdraw(1);
 
     balance = await mockNFT.balanceOf(owner.address);
     expect(balance.toNumber()).to.equal(2);
@@ -240,49 +198,34 @@ describe.only("NFT Staking local", function () {
     expect(supply).to.equal(0);
   });
 
-  it("Should divide rewards correctly with multiple stakers", async function () {
-    let tx = await mockERC20.transfer(
-      nftStake.address,
-      ethers.utils.parseEther("100")
-    );
-    tx.wait();
+  it('Should divide rewards correctly with multiple stakers', async function () {
+    await mockERC20.transfer(nftStake.address, ethers.utils.parseEther('100'));
 
     let oldBalance = await mockERC20.balanceOf(nftStake.address);
     let oldUserBalance = await mockERC20.balanceOf(owner.address);
     let oldUserBalance2 = await mockERC20.balanceOf(addr1.address);
 
-    tx = await mockNFT.createCollectible();
-    tx.wait();
-    tx = await mockNFT.createCollectible();
-    tx.wait();
-    tx = await mockNFT.connect(addr1).createCollectible();
-    tx.wait();
+    await mockNFT.mint();
+    await mockNFT.mint();
+    await mockNFT.connect(addr1).mint();
 
-    tx = await mockNFT.approve(nftStake.address, 1);
-    tx.wait();
+    await nftStake.stake(1);
 
-    tx = await nftStake.stake(1);
-    tx.wait();
+    await nftStake.connect(addr1).stake(2);
 
-    tx = await mockNFT.connect(addr1).approve(nftStake.address, 3);
-    tx.wait();
+    await jumpToTime(time.future1d);
 
-    tx = await nftStake.connect(addr1).stake(3);
-    tx.wait();
-
-    jumpToTime(time.future1d);
-
-    tx = await nftStake.getReward();
+    tx = await nftStake.claimRewards();
     let receipt = await tx.wait();
     let result = receipt.events.filter((x) => {
-      return x.event == "RewardPaid";
+      return x.event == 'RewardPaid';
     });
     const amount = result[0].args.reward;
 
-    tx = await nftStake.connect(addr1).getReward();
+    tx = await nftStake.connect(addr1).claimRewards();
     receipt = await tx.wait();
     result = receipt.events.filter((x) => {
-      return x.event == "RewardPaid";
+      return x.event == 'RewardPaid';
     });
     const amount2 = result[0].args.reward;
 
@@ -308,8 +251,7 @@ describe.only("NFT Staking local", function () {
 
     expect(supply).to.equal(2);
 
-    tx = await nftStake.withdraw(1);
-    tx.wait();
+    await nftStake.withdraw(1);
     balance = await mockNFT.balanceOf(owner.address);
 
     expect(balance.toNumber()).to.equal(2);
@@ -323,23 +265,17 @@ describe.only("NFT Staking local", function () {
     expect(supply).to.equal(1);
   });
 
-  it("Should allow owner to call recoverERC20 and revert on anyone else", async function () {
-    let tx = await mockERC20.transfer(
-      nftStake.address,
-      ethers.utils.parseEther("100")
+  it('Should allow owner to call recoverERC20 and revert on anyone else', async function () {
+    let ownerBalance = await mockERC20.balanceOf(owner.address);
+
+    await mockERC20.transfer(nftStake.address, ethers.utils.parseEther('100'));
+    await nftStake.recoverERC20(mockERC20.address);
+
+    expect(await mockERC20.balanceOf(nftStake.address)).to.equal(0);
+    expect(await mockERC20.balanceOf(owner.address)).to.equal(ownerBalance);
+
+    await expect(nftStake.connect(addr1).recoverERC20(mockERC20.address)).to.be.revertedWith(
+      'Ownable: caller is not the owner'
     );
-    tx.wait();
-
-    let oldBalance = await mockERC20.balanceOf(nftStake.address);
-
-    await expect(nftStake.recoverERC20(mockERC20.address, 100));
-    let newBalance = await mockERC20.balanceOf(nftStake.address);
-    let expectedBalance = oldBalance.sub(100);
-
-    expect(newBalance).to.equal(expectedBalance);
-
-    await expect(
-      nftStake.connect(addr1).recoverERC20(mockERC20.address, 100)
-    ).to.be.revertedWith("Ownable: caller is not the owner");
   });
 });
