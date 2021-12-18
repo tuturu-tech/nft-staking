@@ -71,26 +71,11 @@ contract NFTStake is ERC721Holder, ReentrancyGuard, Ownable, Pausable {
         emit Staked(msg.sender, _tokenId);
     }
 
-    /*
-    function stakeBatch(uint256[] memory _tokenIds)
+    function withdraw(uint256 _tokenId)
         external
+        nonReentrant
         updateReward(msg.sender)
-        notPaused
     {
-        for (uint256 i = 0; i < _tokenIds.length; i++) {
-            uint256 _tokenId = _tokenIds[i];
-            _totalSupply += 1;
-            _balances[msg.sender] += 1;
-            stakingToken.safeTransferFrom(msg.sender, address(this), _tokenId);
-            tokenStaker[_tokenId] = msg.sender;
-            addressToTokensStaked[msg.sender].push(_tokenId);
-            uint256 index = (addressToTokensStaked[msg.sender].length - 1);
-            addressToTokenIndex[msg.sender][_tokenId] = index;
-        }
-    }
-*/
-
-    function withdraw(uint256 _tokenId) external nonReentrant updateReward(msg.sender) {
         require(
             tokenStaker[_tokenId] == msg.sender,
             "Someone else has staked this token "
@@ -107,7 +92,7 @@ contract NFTStake is ERC721Holder, ReentrancyGuard, Ownable, Pausable {
         staker.tokensStaked[tokenIdIndex] = lastIndexKey;
         staker.tokenIdToIndex[lastIndexKey] = tokenIdIndex;
 
-        if (staker.tokensStaked.length > 0) { //Unnecessary?
+        if (staker.tokensStaked.length > 0) {
             staker.tokensStaked.pop();
             delete staker.tokenIdToIndex[_tokenId];
         }
@@ -119,23 +104,6 @@ contract NFTStake is ERC721Holder, ReentrancyGuard, Ownable, Pausable {
         emit Withdrawn(msg.sender, _tokenId);
     }
 
-    /*
-    function withdrawBatch(uint256[] memory _tokenIds)
-        external
-        updateReward(msg.sender)
-    {
-        for (uint256 i = 0; i < _tokenIds.length; i++) {
-            require(
-                tokenStaker[_tokenIds[i]] == msg.sender,
-                "Someone else has staked this token"
-            );
-            uint256 _tokenId = _tokenIds[i];
-            _totalSupply -= 1;
-            _balances[msg.sender] -= 1;
-            stakingToken.safeTransferFrom(address(this), msg.sender, _tokenId);
-        }
-    }
-*/
     function getReward() external nonReentrant updateReward(msg.sender) {
         uint256 reward = rewards[msg.sender];
         rewards[msg.sender] = 0;
@@ -187,12 +155,16 @@ contract NFTStake is ERC721Holder, ReentrancyGuard, Ownable, Pausable {
         emit Recovered(tokenAddress, tokenAmount);
     }
 
-    function updateRewardRate(uint256 _rewardRate) public onlyOwner {
+    function updateRewardRate(uint256 _rewardRate) external onlyOwner {
         rewardRate = _rewardRate;
     }
 
-    function withdrawRewardToken(uint256 tokenAmount) public onlyOwner {
+    function withdrawRewardsToken(uint256 tokenAmount) external onlyOwner {
         rewardsToken.safeTransfer(owner(), tokenAmount);
+    }
+
+    function setRewardToken(address _rewardsToken) external onlyOwner {
+        rewardsToken = IERC20(_rewardsToken);
     }
 
     /* ========== EVENTS ========== */

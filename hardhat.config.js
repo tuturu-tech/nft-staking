@@ -26,11 +26,29 @@ module.exports = {
       url: "http://127.0.0.1:8545",
     },
     hardhat: {},
-    testnet: {
-      url: process.env.SPEEDY_NODE_BSC_TESTNET,
+    /*   ethereum_mainnet_fork: {
+      forking: {
+        url: "https://eth-mainnet.alchemyapi.io/v2/5ZvYqQFMIo2-uoYCdm758OnOhpr4-AeY",
+      },
+    },
+    bsc_mainnet_fork: {
+      forking: {
+        url: "https://bsc-dataseed.binance.org/",
+      },
+    },*/
+    rinkeby: {
+      url: process.env.PROVIDER_RINKEBY,
+      accounts: [process.env.PRIVATE_KEY1, process.env.PRIVATE_KEY2],
+    },
+    kovan: {
+      url: process.env.PROVIDER_KOVAN,
+      accounts: [process.env.PRIVATE_KEY1, process.env.PRIVATE_KEY2],
+    },
+    bsc_testnet: {
+      url: process.env.PROVIDER_BSC_TESTNET,
       chainId: 97,
       gasPrice: 20000000000,
-      accounts: [process.env.PRIVATE_KEY, process.env.PRIVATE_KEY2],
+      accounts: [process.env.PRIVATE_KEY1, process.env.PRIVATE_KEY2],
     },
   },
   solidity: {
@@ -49,6 +67,11 @@ module.exports = {
   },
   mocha: {
     timeout: 20000,
+  },
+  etherscan: {
+    apiKey: process.env.ETHERSCAN_KEY,
+    // apiKey: process.env.BSCSCAN_KEY,
+    // apiKey: process.env.SNOWTRACE_KEY,
   },
   gasReporter: {
     gasPriceApi:
