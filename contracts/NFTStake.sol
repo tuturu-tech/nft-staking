@@ -5,12 +5,12 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/interfaces/IERC721.sol";
 import "@openzeppelin/contracts/token/ERC721/utils/ERC721Holder.sol";
-// import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/security/Pausable.sol";
 
 import "hardhat/console.sol";
 
-contract NFTStake is ERC721Holder, Ownable, Pausable {
+contract NFTStake is ERC721Holder, ReentrancyGuard, Ownable, Pausable {
     using SafeERC20 for IERC20;
 
     IERC20 public rewardsToken;
@@ -46,6 +46,7 @@ contract NFTStake is ERC721Holder, Ownable, Pausable {
 
     function stake(uint256 _tokenId)
         external
+        nonReentrant
         whenNotPaused
         updateReward(msg.sender)
     {
@@ -64,7 +65,11 @@ contract NFTStake is ERC721Holder, Ownable, Pausable {
         emit Staked(msg.sender, _tokenId);
     }
 
-    function withdraw(uint256 _tokenId) external updateReward(msg.sender) {
+    function withdraw(uint256 _tokenId)
+        external
+        nonReentrant
+        updateReward(msg.sender)
+    {
         require(_tokenIdToStaker[_tokenId] == msg.sender, "NOT_CALLERS_TOKEN");
 
         uint256[] storage senderTokenIds = _stakedTokens[msg.sender];
@@ -92,7 +97,7 @@ contract NFTStake is ERC721Holder, Ownable, Pausable {
         emit Withdrawn(msg.sender, _tokenId);
     }
 
-    function claimRewards() external updateReward(msg.sender) {
+    function claimRewards() external nonReentrant updateReward(msg.sender) {
         uint256 reward = rewards[msg.sender];
         rewards[msg.sender] = 0;
 
