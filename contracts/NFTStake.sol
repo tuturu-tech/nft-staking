@@ -50,12 +50,12 @@ contract NFTStake is ERC721Holder, ReentrancyGuard, Ownable, Pausable {
         whenNotPaused
         updateReward(msg.sender)
     {
-        uint256[] storage senderTokenIds = _stakedTokens[msg.sender];
+        uint256[] storage callerTokenIds = _stakedTokens[msg.sender];
 
-        _tokenIdToIndex[_tokenId] = senderTokenIds.length;
+        _tokenIdToIndex[_tokenId] = callerTokenIds.length;
         _tokenIdToStaker[_tokenId] = msg.sender;
 
-        senderTokenIds.push(_tokenId);
+        callerTokenIds.push(_tokenId);
 
         balances[msg.sender]++;
         totalSupply++;
@@ -72,22 +72,24 @@ contract NFTStake is ERC721Holder, ReentrancyGuard, Ownable, Pausable {
     {
         require(_tokenIdToStaker[_tokenId] == msg.sender, "NOT_CALLERS_TOKEN");
 
-        uint256[] storage senderTokenIds = _stakedTokens[msg.sender];
+        uint256[] storage callerTokenIds = _stakedTokens[msg.sender];
 
         // get index of token id to be removed
         uint256 removeTokenIndex = _tokenIdToIndex[_tokenId];
-        // get id of last token in senderTokenIds array that will replace removed token
-        uint256 lastTokenId = senderTokenIds[senderTokenIds.length - 1];
+        // get id of last token in callerTokenIds array that will replace removed token
+        uint256 lastTokenId = callerTokenIds[callerTokenIds.length - 1];
 
         // replace token to be removed with last token
-        senderTokenIds[removeTokenIndex] = lastTokenId;
-        // update pointer in _tokenIdToIndex to index of token to be removed
+        callerTokenIds[removeTokenIndex] = lastTokenId;
+        // update pointer id -> index of last token (replaces removed index)
         _tokenIdToIndex[lastTokenId] = removeTokenIndex;
 
+        // remove token id from index and address mapping
+        _tokenIdToIndex[_tokenId] = 0;
+        _tokenIdToStaker[_tokenId] = address(0);
+
         // remove (now duplicate) last token id
-        senderTokenIds.pop();
-        delete _tokenIdToIndex[_tokenId];
-        delete _tokenIdToStaker[_tokenId];
+        callerTokenIds.pop();
 
         totalSupply--;
         balances[msg.sender]--;
