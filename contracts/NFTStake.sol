@@ -27,7 +27,7 @@ contract NFTStake is ERC721Holder, ReentrancyGuard, Ownable, Pausable {
 
     uint256 private _totalSupply;
     mapping(address => uint256) private _balances;
-    mapping(uint256 => address) private tokenStaker;
+    mapping(uint256 => address) private tokenOwner;
 
     struct Staker {
         uint256[] tokensStaked;
@@ -51,18 +51,58 @@ contract NFTStake is ERC721Holder, ReentrancyGuard, Ownable, Pausable {
         _;
     }
 
-    function stake(uint256 _tokenId)
+    modifier onlyHuman() {
+        require(tx.origin == msg.sender, "NOT HUMAN");
+        _;
+    }
+
+    function stake(uint256 _tokenId) external notPaused nonReentrant onlyHuman {
+        require(stakingToken.ownerOf(_tokenId) == msg.sender);
+        _stake(_tokenId);
+    }
+
+    function stakeBatch(uint256[] calldata _tokenIds)
         external
         notPaused
         nonReentrant
-        updateReward(msg.sender)
+        onlyHuman
     {
+        for (uint256 i = 0; i < _tokenIds.length; i++) {
+            require(stakingToken.ownerOf(_tokenIds[i]) == msg.sender);
+            _stake(_tokenIds[i]);
+        }
+    }
+
+    function withdraw(uint256 _tokenId) external nonReentrant onlyHuman {
+        require(tokenOwner[_tokenId] == msg.sender, "NOT TOKEN OWNER");
+        _withdraw(_tokenId);
+    }
+
+    function withdrawBatch(uint256[] calldata _tokenIds)
+        external
+        nonReentrant
+        onlyHuman
+    {
+        for (uint256 i = 0; i < _tokenIds.length; i++) {
+            require(tokenOwner[_tokenIds[i]] == msg.sender, "NOT TOKEN OWNER");
+            _withdraw(_tokenIds[i]);
+        }
+    }
+
+    function withdrawAll() external nonReentrant onlyHuman {
+        Staker storage staker = stakers[msg.sender];
+        for (uint256 i = 0; i < staker.tokensStaked.length; i++) {
+            _withdraw(staker.tokensStaked[i]);
+        }
+    }
+
+    function _stake(uint256 _tokenId) internal updateReward(msg.sender) {
         Staker storage staker = stakers[msg.sender];
 
         _totalSupply = _totalSupply.add(1);
         _balances[msg.sender] = _balances[msg.sender].add(1);
 
-        tokenStaker[_tokenId] = msg.sender;
+        tokenOwner[_tokenId] = msg.sender;
         staker.tokensStaked.push(_tokenId);
         uint256 index = (staker.tokensStaked.length.sub(1));
         staker.tokenIdToIndex[_tokenId] = index;
@@ -71,15 +111,7 @@ contract NFTStake is ERC721Holder, ReentrancyGuard, Ownable, Pausable {
         emit Staked(msg.sender, _tokenId);
     }
 
-    function withdraw(uint256 _tokenId)
-        external
-        nonReentrant
-        updateReward(msg.sender)
-    {
-        require(
-            tokenStaker[_tokenId] == msg.sender,
-            "Someone else has staked this token "
-        );
+    function _withdraw(uint256 _tokenId) internal updateReward(msg.sender) {
         Staker storage staker = stakers[msg.sender];
 
         _totalSupply = _totalSupply.sub(1);
@@ -97,7 +129,7 @@ contract NFTStake is ERC721Holder, ReentrancyGuard, Ownable, Pausable {
             delete staker.tokenIdToIndex[_tokenId];
         }
 
-        delete tokenStaker[_tokenId];
+        delete tokenOwner[_tokenId];
 
         stakingToken.safeTransferFrom(address(this), msg.sender, _tokenId);
 
@@ -165,6 +197,10 @@ contract NFTStake is ERC721Holder, ReentrancyGuard, Ownable, Pausable {
 
     function setRewardToken(address _rewardsToken) external onlyOwner {
         rewardsToken = IERC20(_rewardsToken);
+    }
+
+    function setStakingToken(address _stakingToken) external onlyOwner {
+        stakingToken = IERC721(_stakingToken);
     }
 
     /* ========== EVENTS ========== */
