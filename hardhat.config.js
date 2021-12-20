@@ -74,8 +74,7 @@ module.exports = {
     // apiKey: process.env.SNOWTRACE_KEY,
   },
   gasReporter: {
-    gasPriceApi:
-      "https://api.polygonscan.com/api?module=proxy&action=eth_gasPrice",
+    coinmarketcap: "7c6dba17-dc6a-42db-996b-9587eaffc8e8",
     token: "BNB",
   },
 };
