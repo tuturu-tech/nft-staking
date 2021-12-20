@@ -70,7 +70,7 @@ describe.only("NFT Staking local", function () {
     expect(balance.toNumber()).to.equal(2);
   });
 
-  it("Should correctly stake NFTs", async function () {
+  it("Should correctly stake single NFTs", async function () {
     let tx = await mockNFT.createCollectible();
     tx.wait();
 
@@ -97,6 +97,43 @@ describe.only("NFT Staking local", function () {
     balance = await mockNFT.balanceOf(nftStake.address);
     expect(balance.toNumber()).to.equal(1);
   });
+
+  it.only("Should correctly stakeBatch NFTs", async function () {
+    let tx = await mockNFT.createCollectible();
+    tx.wait();
+
+    tx = await mockNFT.createCollectible();
+    tx.wait();
+
+    tx = await mockNFT.createCollectible();
+    tx.wait();
+
+    tx = await mockNFT.createCollectible();
+    tx.wait();
+
+    let balance = await mockNFT.balanceOf(owner.address);
+
+    expect(balance.toNumber()).to.equal(4);
+
+    tx = await mockNFT.setApprovalForAll(nftStake.address, true);
+    const isApproved = await mockNFT.isApprovedForAll(
+      owner.address,
+      nftStake.address
+    );
+    expect(isApproved).to.equal(true);
+
+    let tokenIds = [1, 2, 3, 4];
+    tx = await nftStake.stakeBatch(tokenIds);
+    tx.wait();
+
+    balance = await mockNFT.balanceOf(owner.address);
+    expect(balance.toNumber()).to.equal(0);
+
+    balance = await mockNFT.balanceOf(nftStake.address);
+    expect(balance.toNumber()).to.equal(1);
+  });
+
+  it("Should revert if trying to stake NFT you don't own", async function () {});
 
   it("Should correctly fund NFT Staking contract", async function () {
     balance = await mockERC20.balanceOf(owner.address);
