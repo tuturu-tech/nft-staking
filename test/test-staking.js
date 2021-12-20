@@ -98,7 +98,7 @@ describe.only("NFT Staking local", function () {
     expect(balance.toNumber()).to.equal(1);
   });
 
-  it.only("Should correctly stakeBatch NFTs", async function () {
+  it("Should correctly stakeBatch NFTs", async function () {
     let tx = await mockNFT.createCollectible();
     tx.wait();
 
